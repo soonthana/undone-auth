@@ -1,5 +1,13 @@
 using System;
+using System.Net;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Undone.Auth.Models;
+using Undone.Auth.Services;
+using Undone.Auth.Utils;
 
 namespace Undone.Auth.Controllers
 {
@@ -7,29 +15,49 @@ namespace Undone.Auth.Controllers
   [ApiController]
   public class TestController : ControllerBase
   {
-    private string azAuthUrl = "https://login.microsoftonline.com/#[AZTENANTID]#/oauth2/";
-    private string azTenantId = "36727d4d-abcb-4dc8-abd3-03c84096b2d1";
-    private string azAppClientId = "54277f90-56ba-4f9c-aa0d-2377d1d5e601";
-    private string azAppSecretKey = "RzS7i+vc8AUxq6Q2yFYtTozEKRF/BrPlvsX/96cbFas=";
-    private string azAppUrl = "https://soonthanagmail.onmicrosoft.com/4ad4212e-a16f-4f09-a3aa-e1323308a64d";
-    private string azProjKVUrl = "https://stntestkv.vault.azure.net/";
+    private IConfiguration _config;
+    private Azure _azObj;
+
+    public TestController(IConfiguration config)
+    {
+      _config = config;
+      _azObj = new Azure(_config);
+    }
 
     // GET api/test
     [HttpGet]
-    public ActionResult<string> Get()
+    public async Task<ActionResult> Get()
     {
-      return "test test";
-    }
+      
+      // return _azObj.TestGetAccessToken();
 
-    private string GetAccessToken()
-    {
-      var authUrl = azAuthUrl.Replace("#[AZTENANTID]#", azTenantId) + "token";
+      // var resp = await _azObj.GetValueBySecretName("test-TXT");
+      // var resp = await _azObj.GetValueBySecretName(_config["Jwt:Key:HS256:SymmetricKeyJson"]);
+      // var resp = await _azObj.GetValueBySecretName(_config["Jwt:Key:ES256:PrivateKeyJson"]);
+      // var resp = await _azObj.GetValueBySecretName(_config["Jwt:Key:RS256:PublicKeyXml"]);
+      var resp = await _azObj.GetValueBySecretName(_config["GoogleApi:Firebase:UndoneAuth:Key:RS256:PrivateKeyXml"]);
 
-      /* FOR AZURE OAUTH2 v2.0 */
-      // var authUrl = azAuthUrl.Replace("#[AZTENANTID]#", azTenantId) + "v2.0/token";
-      // var appUrl = azAppUrl + "/.default";
+      if (resp.StatusCode == HttpStatusCode.OK)
+      {
+        var content = resp.Content.ReadAsStringAsync().Result;
+        var obj = JsonConvert.DeserializeObject<SecretPayload>(content);
 
-      return "";
+        if (obj.contentType.ToLower() == "json")
+        {
+          var jObj = JObject.Parse(obj.value);
+          var result = (string)jObj["Key"];
+          
+          return Ok(result);
+        }
+        else
+        {
+          return Ok(obj.value);
+        }
+      }
+      else
+      {
+        return NotFound("No");
+      }
     }
   }
 }

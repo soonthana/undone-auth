@@ -13,17 +13,20 @@ using System.IdentityModel.Tokens.Jwt;
 using Undone.Auth.Utils;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using Undone.Auth.Services;
 
 namespace Undone.Auth.Middleware
 {
   public class CustomJwtAuthenticationHandler : AuthenticationHandler<CustomJwtAuthenticationOptions>
   {
     private IConfiguration _config;
+    private Azure _azObj;
 
     public CustomJwtAuthenticationHandler(IOptionsMonitor<CustomJwtAuthenticationOptions> options, ILoggerFactory logger, UrlEncoder encoder, ISystemClock clock, IConfiguration config)
             : base(options, logger, encoder, clock)
     {
       _config = config;
+      _azObj = new Azure(_config);
     }
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -71,7 +74,7 @@ namespace Undone.Auth.Middleware
           ValidateLifetime = true,
           ValidateIssuerSigningKey = true,
           ClockSkew = TimeSpan.Zero,
-          IssuerSigningKey = Jwt.GetSecurityKey(jwtAlg, _config)
+          IssuerSigningKey = Jwt.GetSecurityKey(jwtAlg, _config, _azObj)
         }, out var parsedToken);
 
         var result = claimPrincipal.Identity.IsAuthenticated;

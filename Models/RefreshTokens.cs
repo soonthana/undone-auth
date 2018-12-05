@@ -8,8 +8,11 @@ namespace Undone.Auth.Models
     public string RefreshToken { get; set; }
     public string AppAudienceId { get; set; }
     public string ResourceOwnerId { get; set; }
-    public DateTime IssuedDateTime { get; set; }
-    public DateTime ExpiryDateTime { get; set; }
+    public string IssuedDateTime { get; set; }
+    public string ExpiryDateTime { get; set; }
     public bool Status { get; set; }
+    public string GrantType { get; set; }
+    public string AuthenToSystem { get; set; }
+    public string AuthorizationCode { get; set; }
   }
 }

@@ -1,117 +1,77 @@
 using System;
-using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
-using Microsoft.IdentityModel.Tokens;
 using Undone.Auth.Models;
+using Undone.Auth.Services;
 using Undone.Auth.Utils;
 
 namespace Undone.Auth.Controllers
 {
   [Authorize]
   [ApiVersion("1.0")]
-  [Route("api/[controller]")]
   public class AuthController : Controller
   {
     private IConfiguration _config;
+    private Azure _azObj;
 
     public AuthController(IConfiguration config)
     {
       _config = config;
+      // _azObj = new Azure(_config);
     }
 
-    // POST api/auth
+    // GET /api/auth?response_type=code&client_id=<CLIENT_APP_ID>&redirect_uri=<CLIENT_APP_REDIRECT_URI>&state=<CLIENT_APP_STATE>
     [AllowAnonymous]
-    [HttpPost]
-    public IActionResult ValidateToken([FromHeader(Name = "Auth-Jwt")] string token)
+    [HttpGet]
+    [Route("api/auth")]
+    public IActionResult CreateAuthorizationCode([FromQuery] string response_type, string client_id, string redirect_uri, string state, string authen_to_system)
     {
       IActionResult response = Unauthorized();
 
-      var headerKeys = string.Empty;
-      foreach (var key in Request.Headers.Keys)
+      if (response_type != string.Empty && response_type != "null" && response_type != null && response_type.ToLower() == "code")
       {
-        headerKeys += key.ToString() + ", ";
-      }
-      headerKeys = headerKeys.Substring(0, headerKeys.Length - 2);
-
-      if (Request.Headers.Keys.Contains("Auth-Jwt"))
-      {
-        try
+        if (client_id != string.Empty && client_id != "null" & client_id != null)
         {
-          if (ModelState.IsValid) // ModelState อาจจะไม่จำเป็นต้องใช้ หรือใช้ไม่ได้กับ API
+          if (redirect_uri != string.Empty && redirect_uri != "null" && redirect_uri != null)
           {
-            string[] jwtArray = token.Split('.');
-            var jwtHeader = JwtHeader.Base64UrlDeserialize(jwtArray[0]);
-            var jwtPayload = JwtPayload.Base64UrlDeserialize(jwtArray[1]);
+            if (authen_to_system != string.Empty && authen_to_system != "null" && authen_to_system != null)
+            {
+              // TODO: REDIRECT TO USER VALIDATION FORM AND VALIDATE IT
 
-            Jwt.Algorithm jwtAlg;
+              var code = Guid.NewGuid();
 
-            if (jwtHeader.Alg == "HS256")
-            {
-              jwtAlg = Jwt.Algorithm.HS256;
-            }
-            else if (jwtHeader.Alg == "RS256")
-            {
-              jwtAlg = Jwt.Algorithm.RS256;
-            }
-            else if (jwtHeader.Alg == "ES256")
-            {
-              jwtAlg = Jwt.Algorithm.ES256;
-            }
-            else
-            {
-              jwtAlg = Jwt.Algorithm.HS256;
-            }
-
-            var tokenHandler = new JwtSecurityTokenHandler();
-            try
-            {
-              var claimPrincipal = tokenHandler.ValidateToken(token, new TokenValidationParameters
+              if (state != string.Empty && state != "null" && state != null)
               {
-                ValidIssuer = _config["Jwt:Issuer"],
-                ValidAudience = _config["Jwt:Audience"],
-                ValidateIssuer = true,
-                ValidateAudience = true,
-                ValidateLifetime = true,
-                ValidateIssuerSigningKey = true,
-                ClockSkew = TimeSpan.Zero,
-                IssuerSigningKey = Jwt.GetSecurityKey(jwtAlg, _config)
-              }, out var parsedToken);
-
-              var result = claimPrincipal.Identity.IsAuthenticated;
-
-              if (result)
-              {
-                return Ok(token);
+                response = Redirect(redirect_uri + "?code=" + code + "&state=" + state);
               }
               else
               {
-                response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND999", "Unauthorized, Invalid AccessToken (" + token + ").", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจาก AccessToken ไม่ถูกต้อง หรือหมดอายุแล้ว, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The AccessToken is invalid or expired, please contact your Application Administrator.");
+                response = Redirect(redirect_uri + "?code=" + code);
               }
+
+              return response;
             }
-            catch
+            else
             {
-              response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND999", "Unauthorized, Invalid AccessToken (" + token + ").", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจาก AccessToken ไม่ถูกต้อง หรือหมดอายุแล้ว, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The AccessToken is invalid or expired, please contact your Application Administrator.");
+              return CustomHttpResponse.Error(HttpStatusCode.BadRequest, Errors.ExceptionalOccured, "Authen_To_System is empty");
             }
           }
-          else // ModelState อาจจะไม่จำเป็นต้องใช้ หรือใช้ไม่ได้กับ API
+          else
           {
-            response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND996", "Unauthorized, Invalid Model (There is invalid header key '" + headerKeys + "').", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจากส่งคำร้องขอมาไม่ถูกต้อง, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The request is invalid, please contact your Application Administrator.");
+            return CustomHttpResponse.Error(HttpStatusCode.BadRequest, Errors.ExceptionalOccured, "Redirect_Uri is empty");
           }
         }
-        catch (Exception ex)
+        else
         {
-          response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND997", "Unauthorized, Exception occurred (" + ex.Message + " - " + ex.Source + " - " + ex.StackTrace + " - " + ex.InnerException + " - " + ex.HelpLink + ").", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจากส่งคำร้องขอมาไม่ถูกต้อง, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The request is invalid, please contact your Application Administrator.");
+          return CustomHttpResponse.Error(HttpStatusCode.BadRequest, Errors.ExceptionalOccured, "Client_Id is empty");
         }
       }
       else
       {
-        response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND996", "Unauthorized, Invalid Model (There is invalid header key '" + headerKeys + "').", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจากส่งคำร้องขอมาไม่ถูกต้อง, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The request is invalid, please contact your Application Administrator.");
+        return CustomHttpResponse.Error(HttpStatusCode.BadRequest, Errors.ExceptionalOccured, "Response_Type is invalid");
       }
-
-      return response;
     }
   }
 }

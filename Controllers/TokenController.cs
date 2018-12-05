@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Undone.Auth.Models;
@@ -20,21 +21,30 @@ namespace Undone.Auth.Controllers
 {
   [Authorize]
   [ApiVersion("1.0")]
-  [Route("api/[controller]")]
+  // [Route("api/[controller]")]
   public class TokenController : Controller
   {
     private IConfiguration _config;
     private Firebase _authObj;
+    private Azure _azObj;
+    private const string HEADER_AUTH = "Auth-Jwt";
+    private const string GRANT_TYPE_CLIENT_CREDENTIALS = "client_credentials";
+    private const string GRANT_TYPE_PASSWORD = "password";
+    private const string GRANT_TYPE_AUTHORIZATION_CODE = "authorization_code";
+    private const string GRANT_TYPE_REFRESH_TOKEN = "refresh_token";
 
     public TokenController(IConfiguration config)
     {
       _config = config;
       _authObj = new Firebase(_config);
+      _azObj = new Azure(_config);
     }
 
+    #region PUBLIC METHODS
     // POST api/token
     [AllowAnonymous]
     [HttpPost]
+    [Route("api/token")]
     public IActionResult CreateToken([FromBody] AuthenticationModel authen)
     {
       IActionResult response = Unauthorized();
@@ -44,133 +54,515 @@ namespace Undone.Auth.Controllers
       {
         if (ModelState.IsValid) // ModelState อาจจะไม่จำเป็นต้องใช้ หรือใช้ไม่ได้กับ API
         {
-          if (authen.Grant_Type.ToLower() == "password")
+          if (authen.grant_type.ToLower() == GRANT_TYPE_CLIENT_CREDENTIALS)
           {
-            if (authen.Client_Id != string.Empty)
+            if (authen.client_id != string.Empty && authen.client_id != "null" && authen.client_id != null)
             {
-              if (authen.Client_Secret_Key != string.Empty)
+              if (authen.client_secret != string.Empty && authen.client_secret != "null" && authen.client_secret != null)
               {
-                if (authen.User_Id != string.Empty)
+                var appAudObj = GetAppAudiencesById(authen.client_id).Result;
+
+                if (appAudObj != null)
                 {
-                  var appAudObj = GetAppAudiencesById(authen.Client_Id).Result;
+                  if (appAudObj.ExpiryDate > DateTime.UtcNow)
+                  {
+                    if (appAudObj.AppSecretKey == authen.client_secret)
+                    {
+                      var refreshTokenObj = BuildRefreshToken(authen.username, authen.client_id, GRANT_TYPE_CLIENT_CREDENTIALS, authen.authen_to_system, authen.code);
+                      var accessTokenObj = BuildAccessToken(authen.username, authen.client_id, refreshTokenObj.RefreshToken, Jwt.Algorithm.ES256, GRANT_TYPE_CLIENT_CREDENTIALS);
+
+                      var tokenResp = new TokenResponse();
+                      tokenResp.token_type = "Bearer";
+                      tokenResp.access_token = accessTokenObj.AccessToken;
+                      tokenResp.expires_in = _config["Jwt:Expires"];
+                      tokenResp.refresh_token = refreshTokenObj.RefreshToken;
+                      tokenResp.refresh_token_expires_in = _config["Jwt:RefreshTokenExpires"];
+
+                      response = Ok(tokenResp);
+                    }
+                    else
+                    {
+                      response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientSecretKey, "Unauthorized, Client App Secret Key (" + authen.client_secret + ") is invalid.");
+                    }
+                  }
+                  else
+                  {
+                    response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientAppId, "Unauthorized, Client App Id (" + authen.client_id + ") is expired (" + appAudObj.ExpiryDate + ").");
+                  }
+                }
+                else
+                {
+                  response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientAppId, "Unauthorized, Client App Id (" + authen.client_id + ") is invalid.");
+                }
+              }
+              else
+              {
+                response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientSecretKey, "Unauthorized, Client App Secret Key is empty.");
+              }
+            }
+            else
+            {
+              response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientAppId, "Unauthorized, Client App Id is empty.");
+            }
+          }
+          else if (authen.grant_type.ToLower() == GRANT_TYPE_PASSWORD)
+          {
+            if (authen.client_id != string.Empty && authen.client_id != "null" && authen.client_id != null)
+            {
+              if (authen.client_secret != string.Empty && authen.client_secret != "null" && authen.client_secret != null)
+              {
+                if (authen.username != string.Empty && authen.username != "null" && authen.username != null)
+                {
+                  if (authen.password != string.Empty && authen.password != "null" && authen.password != null)
+                  {
+                    if (authen.authen_to_system != string.Empty && authen.authen_to_system != "null" && authen.authen_to_system != null)
+                    {
+                      var appAudObj = GetAppAudiencesById(authen.client_id).Result;
+
+                      if (appAudObj != null)
+                      {
+                        if (appAudObj.ExpiryDate > DateTime.UtcNow)
+                        {
+                          if (appAudObj.AppSecretKey == authen.client_secret)
+                          {
+                            // TODO: TO VALIDATE USERNAME AND PASSWORD
+                            var IsValidated = true;
+
+                            switch (authen.authen_to_system.ToLower())
+                            {
+                              case "mtl-agent":
+                                // TODO: TO VALIDATE USERNAME AND PASSWORD AGAINST MTL AGENT SYSTEM
+                                break;
+                              case "mtl-smileclub":
+                                // TODO: TO VALIDATE USERNAME AND PASSWORD AGAINST MTL SMILE CLUB SYSTEM
+                                break;
+                              case "mtl-employee":
+                                // TODO: TO VALIDATE USERNAME AND PASSWORD AGAINST MTL EMPLOYEE SYSTEM
+                                break;
+                            }
+
+                            if (IsValidated)
+                            {
+                              var refreshTokenObj = BuildRefreshToken(authen.username, authen.client_id, GRANT_TYPE_PASSWORD, authen.authen_to_system, authen.code);
+                              var accessTokenObj = BuildAccessToken(authen.username, authen.client_id, refreshTokenObj.RefreshToken, Jwt.Algorithm.ES256, GRANT_TYPE_PASSWORD);
+
+                              var tokenResp = new TokenResponse();
+                              tokenResp.token_type = "Bearer";
+                              tokenResp.access_token = accessTokenObj.AccessToken;
+                              tokenResp.expires_in = _config["Jwt:Expires"];
+                              tokenResp.refresh_token = refreshTokenObj.RefreshToken;
+                              tokenResp.refresh_token_expires_in = _config["Jwt:RefreshTokenExpires"];
+
+                              response = Ok(tokenResp);
+                            }
+                            else
+                            {
+                              response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.ExceptionalOccured, "Unauthorized, Username and Password is not valid for the system (" + authen.authen_to_system + ").");
+                            }
+                          }
+                          else
+                          {
+                            response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientSecretKey, "Unauthorized, Client App Secret Key (" + authen.client_secret + ") is invalid.");
+                          }
+                        }
+                        else
+                        {
+                          response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientAppId, "Unauthorized, Client App Id (" + authen.client_id + ") is expired (" + appAudObj.ExpiryDate + ").");
+                        }
+                      }
+                      else
+                      {
+                        response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientAppId, "Unauthorized, Client App Id (" + authen.client_id + ") is invalid.");
+                      }
+                    }
+                    else
+                    {
+                      response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.ExceptionalOccured, "Unauthorized, Authentication System is empty.");
+                    }
+                  }
+                  else
+                  {
+                    response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_Password, "Unauthorized, Password is empty.");
+                  }
+                }
+                else
+                {
+                  response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_Username, "Unauthorized, Username is empty.");
+                }
+              }
+              else
+              {
+                response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientSecretKey, "Unauthorized, Client App Secret Key is empty.");
+              }
+            }
+            else
+            {
+              response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientAppId, "Unauthorized, Client App Id is empty.");
+            }
+          }
+          else if (authen.grant_type.ToLower() == GRANT_TYPE_AUTHORIZATION_CODE)
+          {
+            if (authen.client_id != string.Empty && authen.client_id != "null" && authen.client_id != null)
+            {
+              if (authen.client_secret != string.Empty && authen.client_secret != "null" && authen.client_secret != null)
+              {
+                if (authen.code != string.Empty && authen.code != "null" && authen.code != null)
+                {
+                  if (authen.redirect_uri != string.Empty && authen.redirect_uri != "null" && authen.redirect_uri != null)
+                  {
+                    var appAudObj = GetAppAudiencesById(authen.client_id).Result;
+
+                    if (appAudObj != null)
+                    {
+                      if (appAudObj.ExpiryDate > DateTime.UtcNow)
+                      {
+                        if (appAudObj.AppSecretKey == authen.client_secret)
+                        {
+                          var authCode = GetAuthorizationCodesById(authen.code).Result;
+
+                          if (authCode != null)
+                          {
+                            if (authCode.ClientAppId == authen.client_id)
+                            {
+                              if (DateTime.Parse(authCode.ExpiryDateTime.Replace("Z", ".0000000")) > DateTime.Parse(DateTimes.ConvertToUtcDateTimeInThaiTimeZone(DateTime.UtcNow, DateTimes.DateTimeFormat.YearMonthDayByDashTHourMinuteSecondByColonZ, DateTimes.LanguageCultureName.ENGLISH_UNITED_STATES, DateTimes.DateTimeUtcOffset.HHMMByColon).Replace("Z", ".0000000")))
+                              {
+                                var refreshTokenObj = BuildRefreshToken(authen.username, authen.client_id, GRANT_TYPE_AUTHORIZATION_CODE, authen.authen_to_system, authen.code);
+                                var accessTokenObj = BuildAccessToken(authen.username, authen.client_id, refreshTokenObj.RefreshToken, Jwt.Algorithm.ES256, GRANT_TYPE_AUTHORIZATION_CODE);
+
+                                var tokenResp = new TokenResponse();
+                                tokenResp.token_type = "Bearer";
+                                tokenResp.access_token = accessTokenObj.AccessToken;
+                                tokenResp.expires_in = _config["Jwt:Expires"];
+                                tokenResp.refresh_token = refreshTokenObj.RefreshToken;
+                                tokenResp.refresh_token_expires_in = _config["Jwt:RefreshTokenExpires"];
+
+                                response = Ok(tokenResp);
+                              }
+                              else
+                              {
+                                response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_AuthorizationCode, "Unauthorized, Authorization Code (" + authen.code + ") is expired (" + authCode.ExpiryDateTime + ").");
+                              }
+                            }
+                            else
+                            {
+                              response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_AuthorizationCode, "Unauthorized, Authorization Code (" + authen.code + ") is invalid (AuthorizationCode is not belong to Client App Id).");
+                            }
+                          }
+                          else
+                          {
+                            response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_AuthorizationCode, "Unauthorized, Authorization Code (" + authen.code + ") is invalid.");
+                          }
+                        }
+                        else
+                        {
+                          response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientSecretKey, "Unauthorized, Client App Secret Key (" + authen.client_secret + ") is invalid.");
+                        }
+                      }
+                      else
+                      {
+                        response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientAppId, "Unauthorized, Client App Id (" + authen.client_id + ") is expired (" + appAudObj.ExpiryDate + ").");
+                      }
+                    }
+                    else
+                    {
+                      response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientAppId, "Unauthorized, Client App Id (" + authen.client_id + ") is invalid.");
+                    }
+                  }
+                  else
+                  {
+                    response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_RedirectUri, "Unauthorized, Client App Redirect Uri is empty.");
+                  }
+                }
+                else
+                {
+                  response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_AuthorizationCode, "Unauthorized, Authorization Code is empty.");
+                }
+              }
+              else
+              {
+                response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientSecretKey, "Unauthorized, Client App Secret Key is empty.");
+              }
+            }
+            else
+            {
+              response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientAppId, "Unauthorized, Client App Id is empty.");
+            }
+          }
+          else if (authen.grant_type.ToLower() == GRANT_TYPE_REFRESH_TOKEN)
+          {
+            if (authen.client_id != string.Empty && authen.client_id != "null" && authen.client_id != null)
+            {
+              if (authen.client_secret != string.Empty && authen.client_secret != "null" && authen.client_secret != null)
+              {
+                if (authen.refresh_token != string.Empty && authen.refresh_token != "null" && authen.refresh_token != null)
+                {
+                  var appAudObj = GetAppAudiencesById(authen.client_id).Result;
 
                   if (appAudObj != null)
                   {
                     if (appAudObj.ExpiryDate > DateTime.UtcNow)
                     {
-                      if (appAudObj.AppSecretKey == authen.Client_Secret_Key)
+                      if (appAudObj.AppSecretKey == authen.client_secret)
                       {
-                        var refreshTokenObj = BuildRefreshToken(authen.User_Id, authen.Client_Id);
-                        var accessTokenObj = BuildAccessToken(authen.User_Id, authen.Client_Id, refreshTokenObj.RefreshToken, Jwt.Algorithm.ES256);
+                        var rftkObj = GetRefreshTokenByToken(authen.refresh_token).Result;
 
-                        response = Ok(new { access_token = accessTokenObj.AccessToken, token_type = "Bearer", expires_in = _config["Jwt:Expires"], refresh_token = refreshTokenObj.RefreshToken, refresh_token_expires_in = _config["Jwt:RefreshTokenExpires"] });
+                        if (rftkObj != null)
+                        {
+                          if (rftkObj.AppAudienceId == authen.client_id)
+                          {
+                            if (DateTime.Parse(rftkObj.ExpiryDateTime.Replace("Z", ".0000000")) > DateTime.Parse(DateTimes.ConvertToUtcDateTimeInThaiTimeZone(DateTime.UtcNow, DateTimes.DateTimeFormat.YearMonthDayByDashTHourMinuteSecondByColonZ, DateTimes.LanguageCultureName.ENGLISH_UNITED_STATES, DateTimes.DateTimeUtcOffset.HHMMByColon).Replace("Z", ".0000000")) && rftkObj.Status == true)
+                            {
+                              if (rftkObj.GrantType == GRANT_TYPE_PASSWORD)
+                              {
+                                var userId = GetUserIdByRefreshToken(authen.refresh_token).Result;
+
+                                if (userId != null)
+                                {
+                                  var accessTokenObj = BuildAccessToken(userId, authen.client_id, authen.refresh_token, Jwt.Algorithm.ES256, GRANT_TYPE_REFRESH_TOKEN);
+
+                                  var tokenResp = new TokenResponse();
+                                  tokenResp.token_type = "Bearer";
+                                  tokenResp.access_token = accessTokenObj.AccessToken;
+                                  tokenResp.expires_in = _config["Jwt:Expires"];
+                                  tokenResp.refresh_token = authen.refresh_token;
+                                  tokenResp.refresh_token_expires_in = _config["Jwt:RefreshTokenExpires"];
+
+                                  response = Ok(tokenResp);
+                                }
+                                else
+                                {
+                                  response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.Invalid_RefreshToken, "Unauthorized, RefreshToken (" + authen.refresh_token + ") is invalid (UserId is not found).");
+                                }
+                              }
+                              else
+                              {
+                                var accessTokenObj = BuildAccessToken(authen.username, authen.client_id, authen.refresh_token, Jwt.Algorithm.ES256, GRANT_TYPE_REFRESH_TOKEN);
+
+                                var tokenResp = new TokenResponse();
+                                tokenResp.token_type = "Bearer";
+                                tokenResp.access_token = accessTokenObj.AccessToken;
+                                tokenResp.expires_in = _config["Jwt:Expires"];
+                                tokenResp.refresh_token = authen.refresh_token;
+                                tokenResp.refresh_token_expires_in = _config["Jwt:RefreshTokenExpires"];
+
+                                response = Ok(tokenResp);
+                              }
+                            }
+                            else
+                            {
+                              response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.Invalid_RefreshToken, "Unauthorized, RefreshToken (" + authen.refresh_token + ") is expired (" + rftkObj.ExpiryDateTime + ").");
+                            }
+                          }
+                          else
+                          {
+                            response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.Invalid_RefreshToken, "Unauthorized, RefreshToken (" + authen.refresh_token + ") is invalid (RefreshToken is not belong to Client App Id).");
+                          }
+                        }
+                        else
+                        {
+                          response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.Invalid_RefreshToken, "Unauthorized, RefreshToken (" + authen.refresh_token + ") is not found.");
+                        }
                       }
                       else
                       {
-                        response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND992", "Unauthorized, Invalid Client App Secret Key (" + authen.Client_Secret_Key + ").", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจาก App Secret Key ไม่ถูกต้อง, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The App Secret Key is invalid, please contact your Application Administrator.");
+                        response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientSecretKey, "Unauthorized, Client App Secret Key (" + authen.client_secret + ") is invalid.");
                       }
                     }
                     else
                     {
-                      response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND991", "Unauthorized, Invalid Client App Id (" + authen.Client_Id + ") , Expired (" + appAudObj.ExpiryDate + ").", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจาก App Id หมดอายุแล้ว, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The App Id is expired, please contact your Application Administrator.");
+                      response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientAppId, "Unauthorized, Client App Id (" + authen.client_id + ") is expired (" + appAudObj.ExpiryDate + ").");
                     }
                   }
                   else
                   {
-                    response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND991", "Unauthorized, Invalid Client App Id (" + authen.Client_Id + ").", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจาก App Id ไม่ถูกต้อง, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The App Id is invalid, please contact your Application Administrator.");
+                    response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientAppId, "Unauthorized, Client App Id (" + authen.client_id + ") is invalid.");
                   }
                 }
                 else
                 {
-                  response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND995", "Unauthorized, Empty User Id.", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจาก User Id ไม่ถูกต้อง, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The User Id is incorrect, please contact your Application Administrator.");
+                  response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.Invalid_RefreshToken, "Unauthorized, RefreshToken is empty.");
                 }
               }
               else
               {
-                response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND994", "Unauthorized, Empty Client App Secret Key.", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจาก App Secret ไม่ถูกต้อง, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The App Secret is incorrect, please contact your Application Administrator.");
+                response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientSecretKey, "Unauthorized, Client App Secret Key is empty.");
               }
             }
             else
             {
-              response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND993", "Unauthorized, Empty Client App Id.", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจาก App Id ไม่ถูกต้อง, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The App Id is incorrect, please contact your Application Administrator.");
-            }
-          }
-          else if (authen.Grant_Type.ToLower() == "refresh_token")
-          {
-            if (authen.Client_Id != string.Empty)
-            {
-              if (authen.Refresh_Token != string.Empty)
-              {
-                var appAudObj = GetAppAudiencesById(authen.Client_Id).Result;
-
-                if (appAudObj != null)
-                {
-                  var userId = GetUserIdByRefreshToken(authen.Refresh_Token, authen.Client_Id).Result;
-
-                  if (userId != null)
-                  {
-                    var accessTokenObj = BuildAccessToken(userId, authen.Client_Id, authen.Refresh_Token, Jwt.Algorithm.ES256);
-
-                    response = Ok(new { access_token = accessTokenObj.AccessToken, token_type = "Bearer", expires_in = _config["Jwt:Expires"], refresh_token = authen.Refresh_Token, refresh_token_expires_in = _config["Jwt:RefreshTokenExpires"] });
-                  }
-                  else
-                  {
-                    response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND998", "Unauthorized, Invalid RefreshToken (" + authen.Refresh_Token + ").", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจาก RefreshToken ไม่ถูกต้อง, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The RefreshToken is invalid, please contact your Application Administrator.");
-                  }
-                }
-                else
-                {
-                  response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND991", "Unauthorized, Invalid Client App Id (" + authen.Client_Id + ").", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจาก App Id ไม่ถูกต้อง, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The App Id is invalid, please contact your Application Administrator.");
-                }
-              }
-              else
-              {
-                response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND998", "Unauthorized, Invalid RefreshToken (" + authen.Refresh_Token + ").", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจาก RefreshToken ไม่ถูกต้อง, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The RefreshToken is invalid, please contact your Application Administrator.");
-              }
-            }
-            else
-            {
-              response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND993", "Unauthorized, Empty Client App Id.", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจาก App Id ไม่ถูกต้อง, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The App Id is incorrect, please contact your Application Administrator.");
+              response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.InvalidOrEmpty_ClientAppId, "Unauthorized, Client App Id is empty.");
             }
           }
           else
           {
-            response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND996", "Unauthorized, Invalid Model (grant_type: '" + authen.Grant_Type.ToLower() + "', client_id: '" + authen.Client_Id + "', user_id: '" + authen.User_Id + "', refresh_token: '" + authen.Refresh_Token + "').", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจากส่งคำร้องขอมาไม่ถูกต้อง, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The request is invalid, please contact your Application Administrator.");
+            response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.ExceptionalOccured, "Unauthorized, Grant Type (" + authen.grant_type.ToLower() + ") is invalid.");
           }
         }
         else // ModelState อาจจะไม่จำเป็นต้องใช้ หรือใช้ไม่ได้กับ API
         {
-          response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND996", "Unauthorized, Invalid Model (grant_type: '" + authen.Grant_Type.ToLower() + "', client_id: '" + authen.Client_Id + "', user_id: '" + authen.User_Id + "', refresh_token: '" + authen.Refresh_Token + "').", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจากส่งคำร้องขอมาไม่ถูกต้อง, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The request is invalid, please contact your Application Administrator.");
+          response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.ExceptionalOccured, "Unauthorized, Input Model (grant_type: '" + authen.grant_type.ToLower() + "', client_id: '" + authen.client_id + "', user_id: '" + authen.username + "', refresh_token: '" + authen.refresh_token + "') is invalid.");
         }
       }
       catch (Exception ex)
       {
-        response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, "UND997", "Unauthorized, Exception occurred (" + ex.Message + " - " + ex.Source + " - " + ex.StackTrace + " - " + ex.InnerException + " - " + ex.HelpLink + ").", "แอพฯ ของคุณไม่มีสิทธิ์ใช้งาน เนื่องจากส่งคำร้องขอมาไม่ถูกต้อง, กรุณาติดต่อผู้ดูแลแอพฯ ของคุณ", "The request is invalid, please contact your Application Administrator.");
+        response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.ExceptionalOccured, "Unauthorized, Exception occurred (" + ex.Message + " - " + ex.Source + " - " + ex.StackTrace + " - " + ex.InnerException + " - " + ex.HelpLink + ").");
       }
 
       return response;
     }
 
-    private AccessTokens BuildAccessToken(string userId, string clientAppId, string refreshToken, Jwt.Algorithm alg)
+    // POST api/token/verify
+    [AllowAnonymous]
+    [HttpPost]
+    [Route("api/token/verify")]
+    public IActionResult VerifyToken([FromHeader(Name = HEADER_AUTH)] string token)
+    {
+      IActionResult response = Unauthorized();
+
+      var headerKeys = string.Empty;
+      foreach (var key in Request.Headers.Keys)
+      {
+        headerKeys += key.ToString() + ", ";
+      }
+      headerKeys = headerKeys.Substring(0, headerKeys.Length - 2);
+
+      if (Request.Headers.Keys.Contains(HEADER_AUTH))
+      {
+        var reqHeader = Request.Headers.FirstOrDefault(h => h.Key == HEADER_AUTH);
+        if (reqHeader.Value != string.Empty && reqHeader.Value != "null")
+        {
+          try
+          {
+            if (ModelState.IsValid) // ModelState อาจจะไม่จำเป็นต้องใช้ หรือใช้ไม่ได้กับ API
+            {
+              try
+              {
+                var handler = new JwtSecurityTokenHandler();
+                var jwtSecToken = handler.ReadToken(token) as JwtSecurityToken;
+
+                string[] jwtArray = token.Split('.');
+                var jwtHeader = JwtHeader.Base64UrlDeserialize(jwtArray[0]);
+                var jwtPayload = JwtPayload.Base64UrlDeserialize(jwtArray[1]);
+
+                Jwt.Algorithm jwtAlg;
+
+                if (jwtHeader.Alg == "HS256")
+                {
+                  jwtAlg = Jwt.Algorithm.HS256;
+                }
+                else if (jwtHeader.Alg == "RS256")
+                {
+                  jwtAlg = Jwt.Algorithm.RS256;
+                }
+                else if (jwtHeader.Alg == "ES256")
+                {
+                  jwtAlg = Jwt.Algorithm.ES256;
+                }
+                else
+                {
+                  jwtAlg = Jwt.Algorithm.HS256;
+                }
+
+                var tokenHandler = new JwtSecurityTokenHandler();
+                try
+                {
+                  var claimPrincipal = tokenHandler.ValidateToken(token, new TokenValidationParameters
+                  {
+                    ValidIssuer = _config["Jwt:Issuer"],
+                    ValidAudience = _config["Jwt:Audience"],
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    ClockSkew = TimeSpan.Zero,
+                    IssuerSigningKey = Jwt.GetSecurityKey(jwtAlg, _config, _azObj)
+                  }, out var parsedToken);
+
+                  var result = claimPrincipal.Identity.IsAuthenticated;
+
+                  if (result)
+                  {
+                    return Ok(new { result, token });
+                  }
+                  else
+                  {
+                    response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.Invalid_AccessToken, "Unauthorized, AccessToken (" + token + ") is invalid (Can Not Authenticated).");
+                  }
+                }
+                catch (Exception ex)
+                {
+                  response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.Invalid_AccessToken, "Unauthorized, AccessToken (" + token + ") is invalid (>> " + ex.Message + ").");
+                }
+              }
+              catch (Exception ex)
+              {
+                response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.Invalid_AccessToken, "Unauthorized, AccessToken (" + token + ") is invalid (> " + ex.Message + ").");
+              }
+            }
+            else // ModelState อาจจะไม่จำเป็นต้องใช้ หรือใช้ไม่ได้กับ API
+            {
+              response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.ExceptionalOccured, "Unauthorized, Input Model ('" + headerKeys + "') is invalid.");
+            }
+          }
+          catch (Exception ex)
+          {
+            response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.ExceptionalOccured, "Unauthorized, Exception occurred (" + ex.Message + " - " + ex.Source + " - " + ex.StackTrace + " - " + ex.InnerException + " - " + ex.HelpLink + ").");
+          }
+        }
+        else
+        {
+          response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.Invalid_AccessToken, "Unauthorized, AccessToken is empty");
+        }
+      }
+      else
+      {
+        response = CustomHttpResponse.Error(HttpStatusCode.Unauthorized, Errors.ExceptionalOccured, "Unauthorized, Input Model is invalid (There is no Auth-Jwt).");
+      }
+
+      return response;
+    }
+    #endregion
+
+    #region PRIVATE METHODS
+    private AccessTokens BuildAccessToken(string userId, string clientAppId, string refreshToken, Jwt.Algorithm alg, string grantType)
     {
       var obj = new AccessTokens();
       obj.Id = Guid.NewGuid();
       obj.RefreshToken = refreshToken;
-      obj.IssuedDateTime = DateTime.UtcNow;
-      obj.ExpiryDateTime = DateTime.UtcNow.AddSeconds(Convert.ToDouble(_config["Jwt:Expires"]));
+      obj.IssuedDateTime = DateTimes.GetCurrentUtcDateTimeInThaiTimeZone(DateTimes.DateTimeFormat.YearMonthDayByDashTHourMinuteSecondByColonZ, DateTimes.LanguageCultureName.ENGLISH_UNITED_STATES, DateTimes.DateTimeUtcOffset.HHMMByColon);
+      var AccessTokenExpiryDateTime = DateTime.UtcNow.AddSeconds(Convert.ToDouble(_config["Jwt:Expires"]));
+      obj.ExpiryDateTime = DateTimes.ConvertToUtcDateTimeInThaiTimeZone(AccessTokenExpiryDateTime, DateTimes.DateTimeFormat.YearMonthDayByDashTHourMinuteSecondByColonZ, DateTimes.LanguageCultureName.ENGLISH_UNITED_STATES, DateTimes.DateTimeUtcOffset.HHMMByColon);
 
-      var claims = new[] {
-        new Claim(JwtRegisteredClaimNames.UniqueName, userId),
-        new Claim(JwtRegisteredClaimNames.Sub, userId),
-        new Claim(JwtRegisteredClaimNames.Jti, obj.Id.ToString("N"))
-      };
+      Claim[] claims;
+
+      if (grantType == GRANT_TYPE_PASSWORD)
+      {
+        claims = new[] {
+          new Claim(JwtRegisteredClaimNames.UniqueName, userId),
+          new Claim(JwtRegisteredClaimNames.Sub, userId),
+          new Claim(JwtRegisteredClaimNames.Jti, obj.Id.ToString("N")),
+          new Claim(JwtRegisteredClaimNames.Iat, DateTimes.ConvertToUnixTimeByDateTime(DateTime.UtcNow).ToString(), System.Security.Claims.ClaimValueTypes.Integer32),
+          new Claim(JwtRegisteredClaimNames.Nbf, DateTimes.ConvertToUnixTimeByDateTime(DateTime.UtcNow).ToString(), System.Security.Claims.ClaimValueTypes.Integer32),
+          new Claim("appid", clientAppId)
+        };
+      }
+      else
+      {
+        claims = new[] {
+          new Claim(JwtRegisteredClaimNames.Jti, obj.Id.ToString("N")),
+          new Claim(JwtRegisteredClaimNames.Iat, DateTimes.ConvertToUnixTimeByDateTime(DateTime.UtcNow).ToString(), System.Security.Claims.ClaimValueTypes.Integer32),
+          new Claim(JwtRegisteredClaimNames.Nbf, DateTimes.ConvertToUnixTimeByDateTime(DateTime.UtcNow).ToString(), System.Security.Claims.ClaimValueTypes.Integer32),
+          new Claim("appid", clientAppId)
+        };
+      }
 
       var token = new JwtSecurityToken(
-        _config["Jwt:Issuer"],
-        _config["Jwt:Audience"],
-        claims,
-        expires: obj.ExpiryDateTime,
-        signingCredentials: Jwt.CreateSigningCredentials(alg, _config)
+        issuer: _config["Jwt:Issuer"],
+        audience: _config["Jwt:Audience"],
+        claims: claims,
+        expires: AccessTokenExpiryDateTime,
+        notBefore: DateTime.UtcNow,
+        signingCredentials: Jwt.CreateSigningCredentials(alg, _config, _azObj)
       );
 
       obj.AccessToken = new JwtSecurityTokenHandler().WriteToken(token);
@@ -180,19 +572,29 @@ namespace Undone.Auth.Controllers
       var authAccessToken = _authObj.PutAccessTokens(obj);
 
       // Update RefreshToken to AuthDB (For future checking)
-      var authRefreshToken = _authObj.PutRefreshTokensAccessToken(refreshToken, obj.AccessToken, DateTimes.ConvertToUtcDateTimeInThaiTimeZone(obj.IssuedDateTime, DateTimes.DateTimeFormat.YearMonthDayHourMinuteSecond, DateTimes.LanguageCultureName.ENGLISH_UNITED_STATES, DateTimes.DateTimeUtcOffset.HHMM));
+      var authRefreshToken = _authObj.PutRefreshTokensAccessToken(refreshToken, obj.AccessToken, obj.IssuedDateTime);
 
       return obj;
     }
 
-    private RefreshTokens BuildRefreshToken(string userId, string clientAppId)
+    private RefreshTokens BuildRefreshToken(string userId, string clientAppId, string grantType, string authenToSystem, string authorizationCode)
     {
       var obj = new RefreshTokens();
       obj.Id = Guid.NewGuid();
       obj.AppAudienceId = clientAppId;
-      obj.ResourceOwnerId = userId;
-      obj.IssuedDateTime = DateTime.UtcNow;
-      obj.ExpiryDateTime = DateTime.UtcNow.AddSeconds(Convert.ToDouble(_config["Jwt:RefreshTokenExpires"]));
+      obj.IssuedDateTime = DateTimes.GetCurrentUtcDateTimeInThaiTimeZone(DateTimes.DateTimeFormat.YearMonthDayByDashTHourMinuteSecondByColonZ, DateTimes.LanguageCultureName.ENGLISH_UNITED_STATES, DateTimes.DateTimeUtcOffset.HHMMByColon);
+      var RefreshTokenExpiryDateTime = DateTime.UtcNow.AddSeconds(Convert.ToDouble(_config["Jwt:RefreshTokenExpires"]));
+      obj.ExpiryDateTime = DateTimes.ConvertToUtcDateTimeInThaiTimeZone(RefreshTokenExpiryDateTime, DateTimes.DateTimeFormat.YearMonthDayByDashTHourMinuteSecondByColonZ, DateTimes.LanguageCultureName.ENGLISH_UNITED_STATES, DateTimes.DateTimeUtcOffset.HHMMByColon);
+      obj.GrantType = grantType;
+      if (grantType == GRANT_TYPE_PASSWORD)
+      {
+        obj.ResourceOwnerId = userId;
+        obj.AuthenToSystem = authenToSystem;
+      }
+      if (grantType == GRANT_TYPE_AUTHORIZATION_CODE)
+      {
+        obj.AuthorizationCode = authorizationCode;
+      }
 
       var key = Encoding.UTF8.GetBytes(obj.AppAudienceId);
       var message = Encoding.UTF8.GetBytes(obj.Id.ToString("N"));
@@ -222,79 +624,74 @@ namespace Undone.Auth.Controllers
       }
     }
 
-    private async Task<string> GetUserIdByRefreshToken(string refreshToken, string clientAppId)
+    private async Task<RefreshTokens> GetRefreshTokenByToken(string refreshToken)
     {
-      if (refreshToken != "")
+      // Get a RefreshToken from AuthDB
+      var authRefreshToken = await _authObj.GetRefreshTokenByToken(refreshToken);
+      var authRefreshTokenJsonString = authRefreshToken.Content.ReadAsStringAsync().Result.ToString();
+
+      if (authRefreshToken.StatusCode == HttpStatusCode.OK && (authRefreshTokenJsonString != "null" && authRefreshTokenJsonString != null))
       {
-        // Get a RefreshToken from AuthDB
-        var authRefreshToken = await _authObj.GetRefreshTokenByToken(refreshToken);
-        var authRefreshTokenJsonString = authRefreshToken.Content.ReadAsStringAsync().Result.ToString();
+        return JsonConvert.DeserializeObject<RefreshTokens>(authRefreshTokenJsonString);
+      }
+      else
+      {
+        return null;
+      }
+    }
 
-        if (authRefreshToken.StatusCode == HttpStatusCode.OK && (authRefreshTokenJsonString != "null" && authRefreshTokenJsonString != null))
+    private async Task<string> GetUserIdByRefreshToken(string refreshToken)
+    {
+      // Get latest AccessToken
+      var authRefreshTokenAccessToken = await _authObj.GetRefreshTokenAccessTokensByToken(refreshToken);
+      var authRefreshTokenAccessTokenJsonString = authRefreshTokenAccessToken.Content.ReadAsStringAsync().Result.ToString();
+
+      if (authRefreshTokenAccessToken.StatusCode == HttpStatusCode.OK && (authRefreshTokenAccessTokenJsonString != "null" && authRefreshTokenAccessTokenJsonString != null))
+      {
+        var accessTokenList = JObject.Parse(authRefreshTokenAccessTokenJsonString);
+        var jkvList = new List<JsonKeyValue>();
+
+        foreach (var item in accessTokenList)
         {
-          var rftkObj = JsonConvert.DeserializeObject<RefreshTokens>(authRefreshTokenJsonString);
+          var jkv = new JsonKeyValue();
+          jkv.Key = item.Key.Replace("---", ".");
+          jkv.Value = item.Value.ToString();
 
-          // Check ClientAppId is valid for RefreshToken
-          if (rftkObj.AppAudienceId == clientAppId)
+          jkvList.Add(jkv);
+        }
+
+        var latestAccessToken = jkvList.OrderByDescending(o => DateTime.Parse(o.Value.Replace("Z", ".0000000"))).FirstOrDefault();
+        var accessToken = latestAccessToken.Key;
+
+        // Decoding latest Access Token from DB (not use key)
+        var handler = new JwtSecurityTokenHandler();
+        var token = handler.ReadToken(accessToken) as JwtSecurityToken;
+        var jwtUniqueName = string.Empty;
+
+        foreach (Claim c in token.Claims)
+        {
+          if (c.Type == "unique_name")
           {
-            // Check is valid RefreshToken
-            if (rftkObj.ExpiryDateTime > DateTime.UtcNow && rftkObj.Status == true)
-            {
-              // Get latest AccessToken
-              var authRefreshTokenAccessToken = await _authObj.GetRefreshTokenAccessTokensByToken(refreshToken);
-              var authRefreshTokenAccessTokenJsonString = authRefreshTokenAccessToken.Content.ReadAsStringAsync().Result.ToString();
-
-              if (authRefreshTokenAccessToken.StatusCode == HttpStatusCode.OK && (authRefreshTokenAccessTokenJsonString != "null" && authRefreshTokenAccessTokenJsonString != null))
-              {
-                var accessTokenList = JObject.Parse(authRefreshTokenAccessTokenJsonString);
-                var jkvList = new List<JsonKeyValue>();
-
-                foreach (var item in accessTokenList)
-                {
-                  var jkv = new JsonKeyValue();
-                  jkv.Key = item.Key.Replace("---", ".");
-                  jkv.Value = item.Value.ToString();
-
-                  jkvList.Add(jkv);
-                }
-
-                var latestAccessToken = jkvList.OrderByDescending(o => o.Value).FirstOrDefault();
-                var accessToken = latestAccessToken.Key;
-
-                // Decoding latest Access Token from DB (not use key)
-                var handler = new JwtSecurityTokenHandler();
-                var token = handler.ReadToken(accessToken) as JwtSecurityToken;
-                var jwtUniqueName = string.Empty;
-
-                foreach (Claim c in token.Claims)
-                {
-                  if (c.Type == "unique_name")
-                  {
-                    jwtUniqueName = c.Value;
-                  }
-                }
-
-                return jwtUniqueName;
-              }
-              else
-              {
-                return null;
-              }
-            }
-            else
-            {
-              return null;
-            }
-          }
-          else
-          {
-            return null;
+            jwtUniqueName = c.Value;
           }
         }
-        else
-        {
-          return null;
-        }
+
+        return jwtUniqueName == string.Empty ? null : jwtUniqueName;
+      }
+      else
+      {
+        return null;
+      }
+    }
+
+    private async Task<AuthorizationCodes> GetAuthorizationCodesById(string code)
+    {
+      var authCode = await _authObj.GetAuthorizationCodesById(code);
+      var authCodeJsonString = authCode.Content.ReadAsStringAsync().Result.ToString();
+
+      if (authCode.StatusCode == HttpStatusCode.OK && (authCodeJsonString != "null" && authCodeJsonString != null))
+      {
+        return JsonConvert.DeserializeObject<AuthorizationCodes>(authCodeJsonString);
       }
       else
       {
@@ -319,5 +716,6 @@ namespace Undone.Auth.Controllers
       public string Key { get; set; }
       public string Value { get; set; }
     }
+    #endregion
   }
 }

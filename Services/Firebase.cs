@@ -21,10 +21,12 @@ namespace Undone.Auth.Services
     private IConfiguration _config;
     private string accessToken = string.Empty;
     private string projectUrl = string.Empty;
+    private Azure _azObj;
 
     public Firebase(IConfiguration config)
     {
       _config = config;
+      _azObj = new Azure(_config);
       projectUrl = _config["GoogleApi:Firebase:UndoneAuth:ProjectUrl"];
       accessToken = GetAccessToken().Result;
     }
@@ -182,7 +184,7 @@ namespace Undone.Auth.Services
       client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
 
       var response = await client.GetAsync("RefreshTokens/" + node + "/AccessTokens.json?access_token=" + accessToken);
-      
+
       return response;
     }
 
@@ -247,6 +249,50 @@ namespace Undone.Auth.Services
       return response;
     }
     #endregion
+
+    #region Firebase UndoneAuth.AuthorizationCodes
+    // GET https://undone-auth.firebaseio.com/AuthorizationCodes/<SPECIFIC_NODE>.json?access_token=<ACCESS_TOKEN>
+    public async Task<HttpResponseMessage> GetAuthorizationCodesById(string node)
+    {
+      var client = new HttpClient();
+      client.BaseAddress = new Uri(projectUrl);
+      client.DefaultRequestHeaders.Accept.Clear();
+      client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+      var response = await client.GetAsync("AuthorizationCodes/" + node + ".json?access_token=" + accessToken);
+
+      return response;
+    }
+
+    // PUT https://undone-auth.firebaseio.com/AuthorizationCodes.json?access_token=<ACCESS_TOKEN>
+    public async Task<HttpResponseMessage> PutAuthorizationCodes(AuthorizationCodes code)
+    {
+      var client = new HttpClient();
+      client.BaseAddress = new Uri(projectUrl);
+      client.DefaultRequestHeaders.Accept.Clear();
+      client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+      var jsonString = JsonConvert.SerializeObject(code);
+      var uniqueId = code.Id.ToString();
+      var response = await client.PutAsync("AuthorizationCodes/" + uniqueId + ".json?access_token=" + accessToken, new StringContent(jsonString, Encoding.UTF8, "application/json"));
+
+      return response;
+    }
+
+    // DELETE https://undone-auth.firebaseio.com/AuthorizationCodes/<SPECIFIC_NODE>.json?access_token=<ACCESS_TOKEN>
+    public async Task<HttpResponseMessage> DeleteAuthorizationCodes(string node)
+    {
+      var client = new HttpClient();
+      client.BaseAddress = new Uri(projectUrl);
+      client.DefaultRequestHeaders.Accept.Clear();
+      client.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+
+      var response = await client.DeleteAsync("AuthorizationCodes/" + node + ".json?access_token=" + accessToken);
+
+      return response;
+    }
+    #endregion
+
     #endregion
 
     #region PRIVATE METHODS
@@ -290,7 +336,15 @@ namespace Undone.Auth.Services
 
       using (RSA privateRsa = RSA.Create())
       {
-        var privateKeyXml = File.ReadAllText(_config["GoogleApi:Firebase:UndoneAuth:Key:RS256:PrivateKeyXml"]);
+        // var privateKeyXml = File.ReadAllText(_config["GoogleApi:Firebase:UndoneAuth:Key:RS256:PrivateKeyXml"]);
+        var privateKeyXml = string.Empty;
+        var resp = _azObj.GetValueBySecretName(_config["GoogleApi:Firebase:UndoneAuth:Key:RS256:PrivateKeyXml"]).Result;
+        if (resp.StatusCode == HttpStatusCode.OK)
+        {
+          var content = resp.Content.ReadAsStringAsync().Result;
+          var obj = JsonConvert.DeserializeObject<SecretPayload>(content);
+          privateKeyXml = obj.value;
+        }
         privateRsa.fromXmlString(privateKeyXml);
         var privateKey = new RsaSecurityKey(privateRsa);
         creds = new SigningCredentials(privateKey, SecurityAlgorithms.RsaSha256);
