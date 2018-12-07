@@ -125,7 +125,7 @@ namespace Undone.Auth.Controllers
                         {
                           if (appAudObj.AppSecretKey == authen.client_secret)
                           {
-                            var IsValidated = true;
+                            var IsValidated = false;
 
                             switch (authen.authen_to_system.ToLower())
                             {
@@ -137,6 +137,7 @@ namespace Undone.Auth.Controllers
                                 break;
                               case "mtl-employee":
                                 // TODO: TO VALIDATE USERNAME AND PASSWORD AGAINST MTL EMPLOYEE SYSTEM
+                                IsValidated = true;
                                 break;
                             }
 
@@ -609,7 +610,6 @@ namespace Undone.Auth.Controllers
 
     private async Task<AppAudiences> GetAppAudiencesById(string clientAppId)
     {
-      // Get an client application from AuthDB
       var authAppAudience = await _authObj.GetAppAudiencesById(clientAppId);
       var authAppAudienceJsonString = authAppAudience.Content.ReadAsStringAsync().Result.ToString();
 
@@ -625,7 +625,6 @@ namespace Undone.Auth.Controllers
 
     private async Task<RefreshTokens> GetRefreshTokenByToken(string refreshToken)
     {
-      // Get a RefreshToken from AuthDB
       var authRefreshToken = await _authObj.GetRefreshTokenByToken(refreshToken);
       var authRefreshTokenJsonString = authRefreshToken.Content.ReadAsStringAsync().Result.ToString();
 

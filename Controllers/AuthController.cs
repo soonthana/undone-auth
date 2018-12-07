@@ -21,6 +21,7 @@ namespace Undone.Auth.Controllers
       _authObj = new Firebase(_config);
     }
 
+    #region PUBLIC METHODS
     // GET /Auth/
     public IActionResult Index([FromQuery] string response_type, string client_id, string redirect_uri, string state, string authen_to_system)
     {
@@ -32,14 +33,18 @@ namespace Undone.Auth.Controllers
           {
             if (authen_to_system != string.Empty && authen_to_system != "null" && authen_to_system != null)
             {
-              var authAppAudience = _authObj.GetAppAudiencesById(client_id).Result;
-              var authAppAudienceJsonString = authAppAudience.Content.ReadAsStringAsync().Result.ToString();
+              var appAudObj = GetAppAudiencesById(client_id).Result;
 
-              if (authAppAudience.StatusCode == HttpStatusCode.OK && (authAppAudienceJsonString != "null" && authAppAudienceJsonString != null))
+              if (appAudObj != null)
               {
                 var authCodeObj = new AuthorizationCodeModel();
+                authCodeObj.Authen_To_System = authen_to_system;
+                authCodeObj.Client_Id = client_id;
+                authCodeObj.Redirect_Uri = redirect_uri;
+                authCodeObj.Response_Type = response_type;
+                authCodeObj.State = state;
 
-                return View();
+                return View(authCodeObj);
               }
               else
               {
@@ -102,8 +107,20 @@ namespace Undone.Auth.Controllers
               {
                 var code = Guid.NewGuid();
 
+                var auth = new AuthorizationCodes();
+                auth.Id = code;
+                auth.AuthenToSystem = authCodeObj.Authen_To_System;
+                auth.ClientAppId = authCodeObj.Client_Id;
+                auth.CreatedDateTime = DateTimes.GetCurrentUtcDateTimeInThaiTimeZone(DateTimes.DateTimeFormat.YearMonthDayByDashTHourMinuteSecondByColonZ, DateTimes.LanguageCultureName.ENGLISH_UNITED_STATES, DateTimes.DateTimeUtcOffset.HHMMByColon);
+                var expdt = DateTime.UtcNow.AddSeconds(90);
+                auth.ExpiryDateTime = DateTimes.ConvertToUtcDateTimeInThaiTimeZone(expdt, DateTimes.DateTimeFormat.YearMonthDayByDashTHourMinuteSecondByColonZ, DateTimes.LanguageCultureName.ENGLISH_UNITED_STATES, DateTimes.DateTimeUtcOffset.HHMMByColon);
+                auth.RedirectUri = authCodeObj.Redirect_Uri;
+                auth.State = authCodeObj.State;
+
                 if (authCodeObj.State != string.Empty && authCodeObj.State != "null" && authCodeObj.State != null)
                 {
+                  var resp = _authObj.PutAuthorizationCodes(auth);
+
                   response = Redirect(authCodeObj.Redirect_Uri + "?code=" + code + "&state=" + authCodeObj.State);
                 }
                 else
@@ -138,5 +155,23 @@ namespace Undone.Auth.Controllers
         return View();
       }
     }
+    #endregion
+
+    #region PRIVATE METHODS
+    private async Task<AppAudiences> GetAppAudiencesById(string clientAppId)
+    {
+      var authAppAudience = await _authObj.GetAppAudiencesById(clientAppId);
+      var authAppAudienceJsonString = authAppAudience.Content.ReadAsStringAsync().Result.ToString();
+
+      if (authAppAudience.StatusCode == HttpStatusCode.OK && (authAppAudienceJsonString != "null" && authAppAudienceJsonString != null))
+      {
+        return JsonConvert.DeserializeObject<AppAudiences>(authAppAudienceJsonString);
+      }
+      else
+      {
+        return null;
+      }
+    }
+    #endregion
   }
 }
