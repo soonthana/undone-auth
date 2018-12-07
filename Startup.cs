@@ -63,7 +63,12 @@ namespace Undone.Auth
       app.UseHttpsRedirection();
       app.UseCors("CorsPolicy");
       app.UseAuthentication();
-      app.UseMvc();
+      app.UseMvc(routes => {
+        routes.MapRoute(
+          name: "default",
+          template: "{controller}/{action=Index}/{id?}"
+        );
+      });
     }
   }
 }

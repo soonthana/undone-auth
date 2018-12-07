@@ -125,7 +125,6 @@ namespace Undone.Auth.Controllers
                         {
                           if (appAudObj.AppSecretKey == authen.client_secret)
                           {
-                            // TODO: TO VALIDATE USERNAME AND PASSWORD
                             var IsValidated = true;
 
                             switch (authen.authen_to_system.ToLower())

@@ -1,0 +1,73 @@
+@model Undone.Auth.Models.AuthorizationCodeModel
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>ยืนยันตัวตน ระบบ @Html.ValueFor(model => model.Authen_To_System) - Undone.app</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.3.1/css/all.css">
+  </head>
+
+  <body>
+    <main role="main">
+      <div class="container">
+        <h3>ยืนยันตัวตน ระบบ @Html.ValueFor(model => model.Authen_To_System)</h3>
+
+        @*
+        <form asp-action="Index">
+          <input type="hidden" asp-for="Response_Type" />
+          <input type="hidden" asp-for="Client_Id" />
+          <input type="hidden" asp-for="Redirect_Uri" />
+          <input type="hidden" asp-for="State" />
+          <input type="hidden" asp-for="Authen_To_System" />
+          <div class="form-group">
+            <label asp-for="username">Username</label>
+            <input asp-for="username" class="form-control" placeholder="Enter username" />
+          </div>
+          <div class="form-group">
+            <label asp-for="password">Password</label>
+            <input asp-for="password" class="form-control" placeholder="Password" />
+          </div>
+          <button type="submit" class="btn btn-primary">Submit</button>
+        </form>
+        *@
+
+        @using (Html.BeginForm())
+        {
+          @Html.AntiForgeryToken()
+
+          @Html.HiddenFor(model => model.Response_Type)
+          @Html.HiddenFor(model => model.Client_Id)
+          @Html.HiddenFor(model => model.Redirect_Uri)
+          @Html.HiddenFor(model => model.State)
+          @Html.HiddenFor(model => model.Authen_To_System)
+
+          <div class="form-group">
+            <label for="username">Username</label>
+            @*@Html.EditorFor(model => model.username, new { htmlAttributes = new { @class = "form-control"}})*@
+            <input type="text" class="form-control" id="username" name="username" aria-describedby="usernameHelp" placeholder="Enter username" value="">
+          </div>
+          <div class="form-group">
+            <label for="password">Password</label>
+            @*@Html.EditorFor(model => model.password, new { htmlAttributes = new { @class = "form-control"}})*@
+            <input type="password" class="form-control" id="password" name="password" placeholder="Password" value="">
+          </div>
+          <button type="submit" class="btn btn-primary">Submit</button>
+        }
+
+        <hr>
+        
+      </div>
+    </main>
+
+    <footer class="container">
+      <p>&copy; Undone.app Authorization</p>
+    </footer>
+
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js"></script>
+  </body>
+</html>

@@ -1,35 +1,29 @@
 using System;
 using System.Net;
-using Microsoft.AspNetCore.Authorization;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Newtonsoft.Json;
 using Undone.Auth.Models;
 using Undone.Auth.Services;
 using Undone.Auth.Utils;
 
 namespace Undone.Auth.Controllers
 {
-  [Authorize]
-  [ApiVersion("1.0")]
   public class AuthController : Controller
   {
     private IConfiguration _config;
-    private Azure _azObj;
+    private Firebase _authObj;
 
     public AuthController(IConfiguration config)
     {
       _config = config;
-      // _azObj = new Azure(_config);
+      _authObj = new Firebase(_config);
     }
 
-    // GET /api/auth?response_type=code&client_id=<CLIENT_APP_ID>&redirect_uri=<CLIENT_APP_REDIRECT_URI>&state=<CLIENT_APP_STATE>
-    [AllowAnonymous]
-    [HttpGet]
-    [Route("api/auth")]
-    public IActionResult CreateAuthorizationCode([FromQuery] string response_type, string client_id, string redirect_uri, string state, string authen_to_system)
+    // GET /Auth/
+    public IActionResult Index([FromQuery] string response_type, string client_id, string redirect_uri, string state, string authen_to_system)
     {
-      IActionResult response = Unauthorized();
-
       if (response_type != string.Empty && response_type != "null" && response_type != null && response_type.ToLower() == "code")
       {
         if (client_id != string.Empty && client_id != "null" & client_id != null)
@@ -38,20 +32,19 @@ namespace Undone.Auth.Controllers
           {
             if (authen_to_system != string.Empty && authen_to_system != "null" && authen_to_system != null)
             {
-              // TODO: REDIRECT TO USER VALIDATION FORM AND VALIDATE IT
+              var authAppAudience = _authObj.GetAppAudiencesById(client_id).Result;
+              var authAppAudienceJsonString = authAppAudience.Content.ReadAsStringAsync().Result.ToString();
 
-              var code = Guid.NewGuid();
-
-              if (state != string.Empty && state != "null" && state != null)
+              if (authAppAudience.StatusCode == HttpStatusCode.OK && (authAppAudienceJsonString != "null" && authAppAudienceJsonString != null))
               {
-                response = Redirect(redirect_uri + "?code=" + code + "&state=" + state);
+                var authCodeObj = new AuthorizationCodeModel();
+
+                return View();
               }
               else
               {
-                response = Redirect(redirect_uri + "?code=" + code);
+                return CustomHttpResponse.Error(HttpStatusCode.BadRequest, Errors.InvalidOrEmpty_ClientAppId, "Client_Id is invalid");
               }
-
-              return response;
             }
             else
             {
@@ -71,6 +64,78 @@ namespace Undone.Auth.Controllers
       else
       {
         return CustomHttpResponse.Error(HttpStatusCode.BadRequest, Errors.ExceptionalOccured, "Response_Type is invalid");
+      }
+    }
+
+    // POST /Auth/
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public IActionResult Index([Bind("Response_Type,Client_Id,Redirect_Uri,State,Authen_To_System,username,password")] string username, string password, AuthorizationCodeModel authCodeObj)
+    {
+      try
+      {
+        IActionResult response = Unauthorized();
+
+        if (ModelState.IsValid)
+        {
+          if (username != string.Empty && username != "null" && username != null)
+          {
+            if (password != string.Empty && password != "null" && password != null)
+            {
+              var IsValidated = false;
+
+              switch (authCodeObj.Authen_To_System.ToLower())
+              {
+                case "mtl-agent":
+                  // TODO: TO VALIDATE USERNAME AND PASSWORD AGAINST MTL AGENT SYSTEM
+                  break;
+                case "mtl-smileclub":
+                  // TODO: TO VALIDATE USERNAME AND PASSWORD AGAINST MTL SMILE CLUB SYSTEM
+                  break;
+                case "mtl-employee":
+                  // TODO: TO VALIDATE USERNAME AND PASSWORD AGAINST MTL EMPLOYEE SYSTEM
+                  IsValidated = true;
+                  break;
+              }
+
+              if (IsValidated)
+              {
+                var code = Guid.NewGuid();
+
+                if (authCodeObj.State != string.Empty && authCodeObj.State != "null" && authCodeObj.State != null)
+                {
+                  response = Redirect(authCodeObj.Redirect_Uri + "?code=" + code + "&state=" + authCodeObj.State);
+                }
+                else
+                {
+                  response = Redirect(authCodeObj.Redirect_Uri + "?code=" + code);
+                }
+
+                return response;
+              }
+              else
+              {
+                return View();
+              }
+            }
+            else
+            {
+              return View();
+            }
+          }
+          else
+          {
+            return View();
+          }
+        }
+        else
+        {
+          return View();
+        }
+      }
+      catch
+      {
+        return View();
       }
     }
   }
