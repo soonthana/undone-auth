@@ -69,7 +69,7 @@ namespace Undone.Auth.Controllers
                     if (appAudObj.AppSecretKey == authen.client_secret)
                     {
                       var refreshTokenObj = BuildRefreshToken(authen.username, authen.client_id, GRANT_TYPE_CLIENT_CREDENTIALS, authen.authen_to_system, authen.code);
-                      var accessTokenObj = BuildAccessToken(authen.username, authen.client_id, refreshTokenObj.RefreshToken, Jwt.Algorithm.ES256, GRANT_TYPE_CLIENT_CREDENTIALS);
+                      var accessTokenObj = BuildAccessToken(authen.username, authen.client_id, refreshTokenObj.RefreshToken, Jwt.Algorithm.RS256, GRANT_TYPE_CLIENT_CREDENTIALS);
 
                       var tokenResp = new TokenResponse();
                       tokenResp.token_type = "Bearer";
@@ -312,13 +312,15 @@ namespace Undone.Auth.Controllers
                           {
                             if (DateTime.Parse(rftkObj.ExpiryDateTime.Replace("Z", ".0000000")) > DateTime.Parse(DateTimes.ConvertToUtcDateTimeInThaiTimeZone(DateTime.UtcNow, DateTimes.DateTimeFormat.YearMonthDayByDashTHourMinuteSecondByColonZ, DateTimes.LanguageCultureName.ENGLISH_UNITED_STATES, DateTimes.DateTimeUtcOffset.HHMMByColon).Replace("Z", ".0000000")) && rftkObj.Status == true)
                             {
+                              var alg = GetLastestAccessTokenAlgorithmByRefreshToken(authen.refresh_token).Result;
+
                               if (rftkObj.GrantType == GRANT_TYPE_PASSWORD)
                               {
                                 var userId = GetUserIdByRefreshToken(authen.refresh_token).Result;
 
                                 if (userId != null)
                                 {
-                                  var accessTokenObj = BuildAccessToken(userId, authen.client_id, authen.refresh_token, Jwt.Algorithm.ES256, GRANT_TYPE_REFRESH_TOKEN);
+                                  var accessTokenObj = BuildAccessToken(userId, authen.client_id, authen.refresh_token, alg, GRANT_TYPE_REFRESH_TOKEN);
 
                                   var tokenResp = new TokenResponse();
                                   tokenResp.token_type = "Bearer";
@@ -336,7 +338,7 @@ namespace Undone.Auth.Controllers
                               }
                               else
                               {
-                                var accessTokenObj = BuildAccessToken(authen.username, authen.client_id, authen.refresh_token, Jwt.Algorithm.ES256, GRANT_TYPE_REFRESH_TOKEN);
+                                var accessTokenObj = BuildAccessToken(authen.username, authen.client_id, authen.refresh_token, alg, GRANT_TYPE_REFRESH_TOKEN);
 
                                 var tokenResp = new TokenResponse();
                                 tokenResp.token_type = "Bearer";
@@ -640,7 +642,65 @@ namespace Undone.Auth.Controllers
 
     private async Task<string> GetUserIdByRefreshToken(string refreshToken)
     {
-      // Get latest AccessToken
+      var accessToken = await GetLastestAccessTokenByRefreshToken(refreshToken);
+
+      if (accessToken != null)
+      {
+        var jwtUniqueName = string.Empty;
+
+        foreach (Claim c in accessToken.Claims)
+        {
+          if (c.Type == "unique_name")
+          {
+            jwtUniqueName = c.Value;
+          }
+        }
+
+        return jwtUniqueName == string.Empty ? null : jwtUniqueName;
+      }
+      else
+      {
+        return null;
+      }
+    }
+
+    private async Task<Jwt.Algorithm> GetLastestAccessTokenAlgorithmByRefreshToken(string refreshToken)
+    {
+      var accessToken = await GetLastestAccessTokenByRefreshToken(refreshToken);
+
+      if (accessToken != null)
+      {
+        var jwtHeaderAlg = accessToken.Header.Alg;
+
+        Jwt.Algorithm jwtAlg;
+
+        if (jwtHeaderAlg == "HS256")
+        {
+          jwtAlg = Jwt.Algorithm.HS256;
+        }
+        else if (jwtHeaderAlg == "RS256")
+        {
+          jwtAlg = Jwt.Algorithm.RS256;
+        }
+        else if (jwtHeaderAlg == "ES256")
+        {
+          jwtAlg = Jwt.Algorithm.ES256;
+        }
+        else
+        {
+          jwtAlg = Jwt.Algorithm.HS256;
+        }
+
+        return jwtAlg;
+      }
+      else
+      {
+        return Jwt.Algorithm.HS256;
+      }
+    }
+
+    private async Task<JwtSecurityToken> GetLastestAccessTokenByRefreshToken(string refreshToken)
+    {
       var authRefreshTokenAccessToken = await _authObj.GetRefreshTokenAccessTokensByToken(refreshToken);
       var authRefreshTokenAccessTokenJsonString = authRefreshTokenAccessToken.Content.ReadAsStringAsync().Result.ToString();
 
@@ -659,22 +719,11 @@ namespace Undone.Auth.Controllers
         }
 
         var latestAccessToken = jkvList.OrderByDescending(o => DateTime.Parse(o.Value.Replace("Z", ".0000000"))).FirstOrDefault();
-        var accessToken = latestAccessToken.Key;
 
-        // Decoding latest Access Token from DB (not use key)
         var handler = new JwtSecurityTokenHandler();
-        var token = handler.ReadToken(accessToken) as JwtSecurityToken;
-        var jwtUniqueName = string.Empty;
+        var jwtSecToken = handler.ReadToken(latestAccessToken.Key) as JwtSecurityToken;
 
-        foreach (Claim c in token.Claims)
-        {
-          if (c.Type == "unique_name")
-          {
-            jwtUniqueName = c.Value;
-          }
-        }
-
-        return jwtUniqueName == string.Empty ? null : jwtUniqueName;
+        return jwtSecToken;
       }
       else
       {

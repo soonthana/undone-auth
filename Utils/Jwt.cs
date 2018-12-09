@@ -39,19 +39,18 @@ namespace Undone.Auth.Utils
           creds = new SigningCredentials(hs256SymmetricKey, SecurityAlgorithms.HmacSha256);
           break;
         case Algorithm.RS256:
-          using (RSA privateRsa = RSA.Create())
+          RSA privateRsa = RSA.Create();
+
+          resp = azure.GetValueBySecretName(config["Jwt:Key:RS256:PrivateKeyXml"]).Result;
+          if (resp.StatusCode == HttpStatusCode.OK)
           {
-            resp = azure.GetValueBySecretName(config["Jwt:Key:RS256:PrivateKeyXml"]).Result;
-            if (resp.StatusCode == HttpStatusCode.OK)
-            {
-              content = resp.Content.ReadAsStringAsync().Result;
-              secret = JsonConvert.DeserializeObject<SecretPayload>(content);
-              readKeyIntoString = secret.value;
-            }
-            privateRsa.fromXmlString(readKeyIntoString);
-            var privateKeyRsa = new RsaSecurityKey(privateRsa);
-            creds = new SigningCredentials(privateKeyRsa, SecurityAlgorithms.RsaSha256);
+            content = resp.Content.ReadAsStringAsync().Result;
+            secret = JsonConvert.DeserializeObject<SecretPayload>(content);
+            readKeyIntoString = secret.value;
           }
+          privateRsa.fromXmlString(readKeyIntoString);
+          var privateKeyRsa = new RsaSecurityKey(privateRsa);
+          creds = new SigningCredentials(privateKeyRsa, SecurityAlgorithms.RsaSha256);
           break;
         case Algorithm.ES256:
           resp = azure.GetValueBySecretName(config["Jwt:Key:ES256:PrivateKeyJson"]).Result;
@@ -105,18 +104,17 @@ namespace Undone.Auth.Utils
           securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyModel.Key));
           break;
         case Algorithm.RS256:
-          using (RSA publicRsa = RSA.Create())
+          RSA publicRsa = RSA.Create();
+
+          resp = azure.GetValueBySecretName(config["Jwt:Key:RS256:PublicKeyXml"]).Result;
+          if (resp.StatusCode == HttpStatusCode.OK)
           {
-            resp = azure.GetValueBySecretName(config["Jwt:Key:RS256:PublicKeyXml"]).Result;
-            if (resp.StatusCode == HttpStatusCode.OK)
-            {
-              content = resp.Content.ReadAsStringAsync().Result;
-              secret = JsonConvert.DeserializeObject<SecretPayload>(content);
-              readKeyIntoString = secret.value;
-            }
-            publicRsa.fromXmlString(readKeyIntoString);
-            securityKey = new RsaSecurityKey(publicRsa);
+            content = resp.Content.ReadAsStringAsync().Result;
+            secret = JsonConvert.DeserializeObject<SecretPayload>(content);
+            readKeyIntoString = secret.value;
           }
+          publicRsa.fromXmlString(readKeyIntoString);
+          securityKey = new RsaSecurityKey(publicRsa);
           break;
         case Algorithm.ES256:
           resp = azure.GetValueBySecretName(config["Jwt:Key:ES256:PublicKeyJson"]).Result;

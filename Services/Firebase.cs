@@ -333,10 +333,10 @@ namespace Undone.Auth.Services
       payloadObj.iat = Convert.ToInt32(DateTimes.ConvertToUnixTimeByDateTime(DateTime.UtcNow));
 
       SigningCredentials creds;
+      var result = string.Empty;
 
       using (RSA privateRsa = RSA.Create())
       {
-        // var privateKeyXml = File.ReadAllText(_config["GoogleApi:Firebase:UndoneAuth:Key:RS256:PrivateKeyXml"]);
         var privateKeyXml = string.Empty;
         var resp = _azObj.GetValueBySecretName(_config["GoogleApi:Firebase:UndoneAuth:Key:RS256:PrivateKeyXml"]).Result;
         if (resp.StatusCode == HttpStatusCode.OK)
@@ -348,21 +348,21 @@ namespace Undone.Auth.Services
         privateRsa.fromXmlString(privateKeyXml);
         var privateKey = new RsaSecurityKey(privateRsa);
         creds = new SigningCredentials(privateKey, SecurityAlgorithms.RsaSha256);
+
+        var claims = new[] {
+          new Claim("scope", payloadObj.scope),
+          new Claim(JwtRegisteredClaimNames.Iat, payloadObj.iat.ToString()),
+          new Claim(JwtRegisteredClaimNames.Exp, payloadObj.exp.ToString())
+        };
+        var token = new JwtSecurityToken(
+          payloadObj.iss,
+          payloadObj.aud,
+          claims,
+          signingCredentials: creds
+        );
+
+        result = new JwtSecurityTokenHandler().WriteToken(token);
       }
-
-      var claims = new[] {
-        new Claim("scope", payloadObj.scope),
-        new Claim(JwtRegisteredClaimNames.Iat, payloadObj.iat.ToString()),
-        new Claim(JwtRegisteredClaimNames.Exp, payloadObj.exp.ToString())
-      };
-      var token = new JwtSecurityToken(
-        payloadObj.iss,
-        payloadObj.aud,
-        claims,
-        signingCredentials: creds
-      );
-
-      var result = new JwtSecurityTokenHandler().WriteToken(token);
 
       return result;
     }

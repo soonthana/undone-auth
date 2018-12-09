@@ -696,7 +696,22 @@ namespace Undone.Auth.Utils
       var formatValue = GetDateTimeFormatValue(format);
       var cultureValue = GetCultureValue(culture);
       var currentUtc = DateTime.UtcNow;
-      var timezone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"); //https://msdn.microsoft.com/en-us/library/ms912391(v=winembedded.11).aspx
+      var timezone = TimeZoneInfo.Local;
+      try
+      {
+        timezone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Bangkok"); //https://docs.microsoft.com/en-us/rest/api/maps/timezone/gettimezoneenumwindows
+      }
+      catch
+      {
+        try
+        {
+          timezone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"); //https://msdn.microsoft.com/en-us/library/ms912391(v=winembedded.11).aspx
+        }
+        catch
+        {
+          timezone = TimeZoneInfo.Local;
+        }
+      }
       var convertedTime = TimeZoneInfo.ConvertTimeFromUtc(currentUtc, timezone);
       var offset = timezone.GetUtcOffset(currentUtc);
 
@@ -751,7 +766,22 @@ namespace Undone.Auth.Utils
       var formatValue = GetDateTimeFormatValue(format);
       var cultureValue = GetCultureValue(culture);
       var datetimeUtc = datetime.ToUniversalTime();
-      var timezone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"); //https://msdn.microsoft.com/en-us/library/ms912391(v=winembedded.11).aspx
+      var timezone = TimeZoneInfo.Local;
+      try
+      {
+        timezone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Bangkok"); //https://docs.microsoft.com/en-us/rest/api/maps/timezone/gettimezoneenumwindows
+      }
+      catch
+      {
+        try
+        {
+          timezone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"); //https://msdn.microsoft.com/en-us/library/ms912391(v=winembedded.11).aspx
+        }
+        catch
+        {
+          timezone = TimeZoneInfo.Local;
+        }
+      }
       var convertedTime = TimeZoneInfo.ConvertTimeFromUtc(datetimeUtc, timezone);
       var offset = timezone.GetUtcOffset(datetimeUtc);
 
