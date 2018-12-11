@@ -480,10 +480,11 @@ namespace Undone.Auth.Controllers
                     IssuerSigningKey = Jwt.GetSecurityKey(jwtAlg, _config, _azObj)
                   }, out var parsedToken);
 
-                  var result = claimPrincipal.Identity.IsAuthenticated;
+                  var isAuthen = claimPrincipal.Identity.IsAuthenticated;
 
-                  if (result)
+                  if (isAuthen)
                   {
+                    var result = "valid";
                     return Ok(new { result, token });
                   }
                   else
