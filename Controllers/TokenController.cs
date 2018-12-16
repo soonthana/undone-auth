@@ -69,7 +69,7 @@ namespace Undone.Auth.Controllers
                     if (appAudObj.AppSecretKey == authen.client_secret)
                     {
                       var refreshTokenObj = BuildRefreshToken(authen.username, authen.client_id, GRANT_TYPE_CLIENT_CREDENTIALS, authen.authen_to_system, authen.code);
-                      var accessTokenObj = BuildAccessToken(authen.username, authen.client_id, refreshTokenObj.RefreshToken, Jwt.Algorithm.RS256, GRANT_TYPE_CLIENT_CREDENTIALS);
+                      var accessTokenObj = BuildAccessToken(authen.username, authen.client_id, refreshTokenObj.RefreshToken, Jwt.Algorithm.ES256, GRANT_TYPE_CLIENT_CREDENTIALS);
 
                       var tokenResp = new TokenResponse();
                       tokenResp.token_type = "Bearer";
@@ -541,7 +541,6 @@ namespace Undone.Auth.Controllers
       if (grantType == GRANT_TYPE_PASSWORD)
       {
         claims = new[] {
-          new Claim(JwtRegisteredClaimNames.UniqueName, userId),
           new Claim(JwtRegisteredClaimNames.Sub, userId),
           new Claim(JwtRegisteredClaimNames.Jti, obj.Id.ToString("N")),
           new Claim(JwtRegisteredClaimNames.Iat, DateTimes.ConvertToUnixTimeByDateTime(DateTime.UtcNow).ToString(), System.Security.Claims.ClaimValueTypes.Integer32),
@@ -651,7 +650,7 @@ namespace Undone.Auth.Controllers
 
         foreach (Claim c in accessToken.Claims)
         {
-          if (c.Type == "unique_name")
+          if (c.Type == "sub")
           {
             jwtUniqueName = c.Value;
           }

@@ -39,9 +39,13 @@ namespace Undone.Auth.Controllers
       {
         return _azObj.TestGetAccessToken();
       }
-      else
+      else if (id == 2)
       {
         return _fbObj.TestGetAccessToken();
+      }
+      else
+      {
+        return "8100,8105 ALL ES256";
       }
     }
 
