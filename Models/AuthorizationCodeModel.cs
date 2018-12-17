@@ -9,5 +9,6 @@ namespace Undone.Auth.Models
     public string Redirect_Uri { get; set; }
     public string State { get; set; }
     public string Authen_To_System { get; set; }
+    public string System_Name { get; set; }
   }
 }

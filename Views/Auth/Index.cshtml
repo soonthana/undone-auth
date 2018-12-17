@@ -3,7 +3,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>ยืนยันตัวตน ระบบ @Html.ValueFor(model => model.Authen_To_System) - Undone.app</title>
+    <title>ระบบยืนยันตัวตน - Undone.app Authorization</title>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css">
@@ -13,7 +13,7 @@
   <body>
     <main role="main">
       <div class="container">
-        <h3>ยืนยันตัวตน ระบบ @Html.ValueFor(model => model.Authen_To_System)</h3>
+        <h3>ยืนยันตัวตนของท่านกับ @Html.ValueFor(model => model.Authen_To_System)</h3>
 
         @*
         <!-- <form asp-action="Index">
@@ -43,6 +43,7 @@
           @Html.HiddenFor(model => model.Redirect_Uri)
           @Html.HiddenFor(model => model.State)
           @Html.HiddenFor(model => model.Authen_To_System)
+          @Html.HiddenFor(model => model.System_Name)
 
           <div class="form-group">
             <label for="username">Username</label>
@@ -58,7 +59,11 @@
             *@
             <input type="password" class="form-control" id="password" name="password" placeholder="Password" value="">
           </div>
-          <button type="submit" class="btn btn-primary">Submit</button>
+          <div class="form-group form-check">
+            <input type="checkbox" class="form-check-input" id="allow">
+            <label for="allow" class="form-check-label">Allow @Html.ValueFor(model => model.System_Name) to access your information.</label>
+          </div>
+          <button type="submit" class="btn btn-primary" id="submit" disabled>Submit</button>
         }
 
         <hr>
@@ -73,5 +78,24 @@
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js"></script>
+
+    <script>
+      /*
+      BEG: ACTIONS
+      */
+      // --- BEG: Events --- //
+      $("#allow").change(function() {
+        if ($("#allow").prop("checked") == true) {
+          $("#submit").removeAttr("disabled");
+        }
+        else {
+          $("#submit").attr("disabled", "disabled");
+        }
+      });
+      // --- END: Events --- //
+      /*
+      END: ACTIONS
+      */
+    </script>
   </body>
 </html>

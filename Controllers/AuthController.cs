@@ -43,6 +43,7 @@ namespace Undone.Auth.Controllers
                 authCodeObj.Redirect_Uri = redirect_uri;
                 authCodeObj.Response_Type = response_type;
                 authCodeObj.State = state;
+                authCodeObj.System_Name = appAudObj.Name;
 
                 return View(authCodeObj);
               }
