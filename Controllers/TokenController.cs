@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
@@ -44,6 +45,7 @@ namespace Undone.Auth.Controllers
     // POST api/token
     [AllowAnonymous]
     [HttpPost]
+    [EnableCors("CorsPolicy")]
     [Route("api/token")]
     public IActionResult CreateToken([FromBody] AuthenticationModel authen)
     {
