@@ -43,7 +43,7 @@ namespace Undone.Auth.Controllers
     #region PUBLIC METHODS
     // POST api/token
     [AllowAnonymous]
-    [HttpPost]
+    [HttpPost, HttpOptions]
     [Route("api/token")]
     public IActionResult CreateToken([FromBody] AuthenticationModel authen)
     {
