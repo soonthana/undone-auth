@@ -60,8 +60,8 @@ namespace Undone.Auth
         app.UseHsts();
       }
 
-      app.UseHttpsRedirection();
       app.UseCors("CorsPolicy");
+      app.UseHttpsRedirection();
       app.UseAuthentication();
       app.UseMvc(routes => {
         routes.MapRoute(
