@@ -45,7 +45,6 @@ namespace Undone.Auth.Controllers
     // POST api/token
     [AllowAnonymous]
     [HttpPost]
-    [EnableCors("CorsPolicy")]
     [Route("api/token")]
     public IActionResult CreateToken([FromBody] AuthenticationModel authen)
     {
