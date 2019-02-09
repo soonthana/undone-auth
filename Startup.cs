@@ -36,7 +36,6 @@ namespace Undone.Auth
       services.AddCors(options =>
       {
         options.AddPolicy("CorsPolicy",
-            // builder => builder.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader().AllowCredentials().Build());
             builder => builder.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader().Build());
       });
 
@@ -61,9 +60,9 @@ namespace Undone.Auth
         app.UseHsts();
       }
 
+      app.UseCors("CorsPolicy");
       app.UseHttpsRedirection();
       app.UseAuthentication();
-      app.UseCors("CorsPolicy");
       app.UseMvc(routes => {
         routes.MapRoute(
           name: "default",
