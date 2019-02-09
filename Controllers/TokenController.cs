@@ -46,7 +46,7 @@ namespace Undone.Auth.Controllers
     [AllowAnonymous]
     [HttpPost]
     [Route("api/token")]
-    public IActionResult CreateToken([FromBody] AuthenticationModel authen)
+    public IActionResult CreateToken([FromForm] AuthenticationModel authen)
     {
       IActionResult response = Unauthorized();
       var objResult = new ObjectResult(String.Empty);
